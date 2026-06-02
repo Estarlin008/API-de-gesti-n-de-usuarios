@@ -1,8 +1,13 @@
+using System.Collections.Concurrent;
+using UserManagementAPI.Models;
+using UserManagementAPI.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddSingleton<UserRepository>();
 
 var app = builder.Build();
 
@@ -14,28 +19,44 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
+// Users endpoints (CRUD)
+app.MapPost("/users", (UserCreateDto dto, UserRepository repo) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    var user = new User
+    {
+        Id = Guid.NewGuid(),
+        Name = dto.Name,
+        Email = dto.Email,
+        CreatedAt = DateTime.UtcNow
+    };
 
-app.MapGet("/weatherforecast", () =>
+    repo.Create(user);
+    return Results.Created($"/users/{user.Id}", user);
+});
+
+// PUT: Actualizar un usuario existente
+app.MapPut("/users/{id:guid}", (Guid id, UserUpdateDto dto, UserRepository repo) =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+    var existing = repo.Get(id);
+    if (existing is null)
+        return Results.NotFound();
+
+    // Solo actualiza los campos que no son nulos
+    if (!string.IsNullOrWhiteSpace(dto.Name))
+        existing.Name = dto.Name;
+    if (!string.IsNullOrWhiteSpace(dto.Email))
+        existing.Email = dto.Email;
+
+    repo.Update(id, existing);
+    return Results.Ok(existing);
+});
+
+// DELETE: Eliminar un usuario por ID
+app.MapDelete("/users/{id:guid}", (Guid id, UserRepository repo) =>
+{
+    var deleted = repo.Delete(id);
+    return deleted ? Results.NoContent() : Results.NotFound();
+});
+
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
