@@ -5,6 +5,7 @@ using UserManagementAPI.Models;
 using UserManagementAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +35,68 @@ builder.Services.AddAuthentication(options =>
 });
 
 var app = builder.Build();
+
+//Middleware de gestión de errores global
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync($"{{\"error\":\"Internal server error: {ex.Message}\"}}");
+    }
+});
+
+//Middleware de autenticación personalizado
+app.Use(async (context, next) =>
+{
+    var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+    if (authHeader is null || !authHeader.StartsWith("Bearer "))
+    {
+        context.Response.StatusCode = 401;
+        await context.Response.WriteAsync("{\"error\":\"Unauthorized - Token missing.\"}");
+        return;
+    }
+
+    var token = authHeader.Substring("Bearer ".Length).Trim();
+    var tokenHandler = new JwtSecurityTokenHandler();
+
+    try
+    {
+        tokenHandler.ValidateToken(token, new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(key),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ClockSkew = TimeSpan.Zero
+        }, out _);
+
+        await next(); // Token válido → continuar
+    }
+    catch
+    {
+        context.Response.StatusCode = 401;
+        await context.Response.WriteAsync("{\"error\":\"Unauthorized - Invalid token.\"}");
+    }
+});
+
+//Middleware de registro
+app.Use(async (context, next) =>
+{
+    await next();
+
+    var method = context.Request.Method;
+    var path = context.Request.Path;
+    var statusCode = context.Response.StatusCode;
+
+    Console.WriteLine($"[LOG] {method} {path} => {statusCode}");
+});
+
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
