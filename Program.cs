@@ -20,6 +20,18 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Users endpoints (CRUD)
+
+app.MapGet("/users", (UserRepository repo) =>
+    Results.Ok(repo.GetAll()));
+
+
+app.MapGet("/users/{id:guid}", (Guid id, UserRepository repo) =>
+{
+    var user = repo.Get(id);
+    return user is not null ? Results.Ok(user) : Results.NotFound();
+});
+
+
 app.MapPost("/users", (UserCreateDto dto, UserRepository repo) =>
 {
     var user = new User
