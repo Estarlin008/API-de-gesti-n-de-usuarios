@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.ComponentModel.DataAnnotations;
+using System.Text.RegularExpressions;
 using UserManagementAPI.Models;
 using UserManagementAPI.Services;
 
@@ -22,52 +24,101 @@ app.UseHttpsRedirection();
 // Users endpoints (CRUD)
 
 app.MapGet("/users", (UserRepository repo) =>
-    Results.Ok(repo.GetAll()));
+{
+    try
+    {
+        // Optimización: devolver lista materializada para evitar múltiples enumeraciones
+        var users = repo.GetAll().ToList();
+        return Results.Ok(users);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error al recuperar usuarios: {ex.Message}");
+    }
+});
 
 
 app.MapGet("/users/{id:guid}", (Guid id, UserRepository repo) =>
 {
-    var user = repo.Get(id);
-    return user is not null ? Results.Ok(user) : Results.NotFound();
+    try
+    {
+        var user = repo.Get(id);
+        return user is not null ? Results.Ok(user) : Results.NotFound($"Usuario con ID {id} no encontrado.");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error al recuperar usuario: {ex.Message}");
+    }
 });
 
 
 app.MapPost("/users", (UserCreateDto dto, UserRepository repo) =>
 {
-    var user = new User
+   try
     {
-        Id = Guid.NewGuid(),
-        Name = dto.Name,
-        Email = dto.Email,
-        CreatedAt = DateTime.UtcNow
-    };
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            return Results.BadRequest("El nombre no puede estar vacío.");
 
-    repo.Create(user);
-    return Results.Created($"/users/{user.Id}", user);
+        if (string.IsNullOrWhiteSpace(dto.Email) || !new EmailAddressAttribute().IsValid(dto.Email))
+            return Results.BadRequest("El correo electrónico no es válido.");
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Name = dto.Name.Trim(),
+            Email = dto.Email.Trim(),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        repo.Create(user);
+        return Results.Created($"/users/{user.Id}", user);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error al crear usuario: {ex.Message}");
+    }
 });
 
 // PUT: Actualizar un usuario existente
 app.MapPut("/users/{id:guid}", (Guid id, UserUpdateDto dto, UserRepository repo) =>
 {
-    var existing = repo.Get(id);
-    if (existing is null)
-        return Results.NotFound();
+   try
+    {
+        var existing = repo.Get(id);
+        if (existing is null)
+            return Results.NotFound($"Usuario con ID {id} no encontrado.");
 
-    // Solo actualiza los campos que no son nulos
-    if (!string.IsNullOrWhiteSpace(dto.Name))
-        existing.Name = dto.Name;
-    if (!string.IsNullOrWhiteSpace(dto.Email))
-        existing.Email = dto.Email;
+        if (!string.IsNullOrWhiteSpace(dto.Name))
+            existing.Name = dto.Name.Trim();
 
-    repo.Update(id, existing);
-    return Results.Ok(existing);
+        if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            if (!new EmailAddressAttribute().IsValid(dto.Email))
+                return Results.BadRequest("El correo electrónico no es válido.");
+            existing.Email = dto.Email.Trim();
+        }
+
+        repo.Update(id, existing);
+        return Results.Ok(existing);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error al actualizar usuario: {ex.Message}");
+    }
 });
 
 // DELETE: Eliminar un usuario por ID
 app.MapDelete("/users/{id:guid}", (Guid id, UserRepository repo) =>
 {
-    var deleted = repo.Delete(id);
-    return deleted ? Results.NoContent() : Results.NotFound();
+    try
+    {
+        var deleted = repo.Delete(id);
+        return deleted ? Results.NoContent() : Results.NotFound($"Usuario con ID {id} no encontrado.");
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error al eliminar usuario: {ex.Message}");
+    }
 });
 
 
