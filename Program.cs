@@ -1,6 +1,4 @@
-using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
-using System.Text.RegularExpressions;
 using UserManagementAPI.Models;
 using UserManagementAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
